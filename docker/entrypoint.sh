@@ -148,6 +148,7 @@ EXTRA_LDFLAGS="-L${JEMALLOC_PREFIX}/lib -Wl,-rpath,${JEMALLOC_PREFIX}/lib -ljema
 CONFIGURE_ARGS=(
   --with-boot-jdk=/bootjdk
   --disable-warnings-as-errors
+  --with-native-debug-symbols=none
   --with-extra-cflags="${EXTRA_CFLAGS}"
   --with-extra-cxxflags="${EXTRA_CXXFLAGS}"
   --with-extra-ldflags="${EXTRA_LDFLAGS}"
