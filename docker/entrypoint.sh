@@ -195,12 +195,46 @@ mkdir -p "${LIB_DIR}"
 cp -f "${JEMALLOC_PREFIX}/lib/libjemalloc.so.2" "${LIB_DIR}/"
 ln -sf libjemalloc.so.2 "${LIB_DIR}/libjemalloc.so"
 
-log "Patching RUNPATH on libjvm.so"
-"${PATCHELF_BIN}" --set-rpath '$ORIGIN/..' "${JVM_SO}"
+log "Patching RUNPATH on all binaries linked against jemalloc"
+LIB_ABS="$(readlink -f "${LIB_DIR}")"
+find "${IMAGE_DIR}" -type f \( -name "*.so*" -o -perm /111 \) -print0 | \
+  while IFS= read -r -d '' f; do
+    if ! file "$f" 2>/dev/null | grep -q ELF; then continue; fi
+    if ! ldd "$f" 2>/dev/null | grep -q jemalloc; then continue; fi
 
-log "Verifying final libjvm.so"
-readelf -d "${JVM_SO}" | egrep 'NEEDED|RPATH|RUNPATH' || true
-ldd "${JVM_SO}" | grep jemalloc || true
+    FILE_DIR="$(dirname "$(readlink -f "$f")")"
+    REL="$(python3 -c "import os; print(os.path.relpath('${LIB_ABS}', '${FILE_DIR}'))")"
+
+    if [ "${REL}" = "." ]; then
+      NEW_RPATH="\$ORIGIN"
+    else
+      NEW_RPATH="\$ORIGIN/${REL}"
+    fi
+
+    log "  patching: $f -> ${NEW_RPATH}"
+    "${PATCHELF_BIN}" --set-rpath "${NEW_RPATH}" "$f"
+  done
+
+log "Verifying patched binaries"
+FAILED=0
+find "${IMAGE_DIR}" -type f \( -name "*.so*" -o -perm /111 \) -print0 | \
+  while IFS= read -r -d '' f; do
+    if ! file "$f" 2>/dev/null | grep -q ELF; then continue; fi
+    if ! ldd "$f" 2>/dev/null | grep -q jemalloc; then continue; fi
+    if readelf -d "$f" 2>/dev/null | grep -E 'RPATH|RUNPATH' | grep -q '/opt/jemalloc'; then
+      echo "[WARN] still has absolute rpath: $f"
+      FAILED=1
+    fi
+    if ldd "$f" 2>/dev/null | grep -q "jemalloc.*not found"; then
+      echo "[WARN] jemalloc not found: $f"
+      FAILED=1
+    fi
+  done
+
+if [ "${FAILED}" -eq 1 ]; then
+  err "Some binaries still have bad rpath or missing jemalloc"
+  exit 1
+fi
 
 # ------------------------------------------------------------------------------
 # Package
