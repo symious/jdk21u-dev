@@ -26,6 +26,16 @@ OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 JEMALLOC_PREFIX="${JEMALLOC_PREFIX:-/opt/jemalloc}"
 PATCHELF_PREFIX="${PATCHELF_PREFIX:-/opt/patchelf}"
 
+# BUILD_TYPE: "release" (default) or "debug"
+BUILD_TYPE="${BUILD_TYPE:-release}"
+
+if [[ "${BUILD_TYPE}" != "release" && "${BUILD_TYPE}" != "debug" ]]; then
+  err "BUILD_TYPE must be 'release' or 'debug', got: ${BUILD_TYPE}"
+  exit 1
+fi
+
+log "BUILD_TYPE=${BUILD_TYPE}"
+
 mkdir -p "${OUTPUT_DIR}"
 rm -rf /tmp/jemalloc-src /tmp/patchelf-src /jdk /bootjdk
 mkdir -p /tmp/jemalloc-src /tmp/patchelf-src /bootjdk
@@ -148,11 +158,24 @@ EXTRA_LDFLAGS="-L${JEMALLOC_PREFIX}/lib -Wl,-rpath,${JEMALLOC_PREFIX}/lib -ljema
 CONFIGURE_ARGS=(
   --with-boot-jdk=/bootjdk
   --disable-warnings-as-errors
-  --with-native-debug-symbols=none
   --with-extra-cflags="${EXTRA_CFLAGS}"
   --with-extra-cxxflags="${EXTRA_CXXFLAGS}"
   --with-extra-ldflags="${EXTRA_LDFLAGS}"
 )
+
+if [ "${BUILD_TYPE}" = "debug" ]; then
+  log "Configuring DEBUG build (fastdebug)"
+  CONFIGURE_ARGS+=(
+    --with-debug-level=fastdebug
+    --with-native-debug-symbols=internal
+  )
+else
+  log "Configuring RELEASE build"
+  CONFIGURE_ARGS+=(
+    --with-debug-level=release
+    --with-native-debug-symbols=none
+  )
+fi
 
 if [ "${USE_SDI_VERSION_ARGS}" -eq 1 ]; then
   CONFIGURE_ARGS+=(
@@ -243,6 +266,11 @@ fi
 SAFE_TAG="$(echo "${GIT_TAG}" | sed 's|/|-|g')"
 PKG_DIR="jdk-${SAFE_TAG#jdk-}"
 TAR_GZ_PREFIX="openjdk-${SAFE_TAG#jdk-}_linux-x64_bin"
+
+# Append build type suffix to distinguish debug from release artifacts
+if [ "${BUILD_TYPE}" = "debug" ]; then
+  TAR_GZ_PREFIX="${TAR_GZ_PREFIX}-debug"
+fi
 
 pushd "$(dirname "${IMAGE_DIR}")" >/dev/null
 rm -rf "${PKG_DIR}"
