@@ -26,11 +26,11 @@ OUTPUT_DIR="${OUTPUT_DIR:-/output}"
 JEMALLOC_PREFIX="${JEMALLOC_PREFIX:-/opt/jemalloc}"
 PATCHELF_PREFIX="${PATCHELF_PREFIX:-/opt/patchelf}"
 
-# BUILD_TYPE: "release" (default) or "debug"
+# BUILD_TYPE: "release" (default) or "fastdebug" or "slowdebug"
 BUILD_TYPE="${BUILD_TYPE:-release}"
 
-if [[ "${BUILD_TYPE}" != "release" && "${BUILD_TYPE}" != "debug" ]]; then
-  err "BUILD_TYPE must be 'release' or 'debug', got: ${BUILD_TYPE}"
+if [[ "${BUILD_TYPE}" != "release" && "${BUILD_TYPE}" != "fastdebug" && "${BUILD_TYPE}" != "slowdebug" ]]; then
+  err "BUILD_TYPE must be 'release', 'fastdebug', or 'slowdebug', got: ${BUILD_TYPE}"
   exit 1
 fi
 
@@ -163,10 +163,16 @@ CONFIGURE_ARGS=(
   --with-extra-ldflags="${EXTRA_LDFLAGS}"
 )
 
-if [ "${BUILD_TYPE}" = "debug" ]; then
-  log "Configuring DEBUG build (fastdebug)"
+if [ "${BUILD_TYPE}" = "fastdebug" ]; then
+  log "Configuring FASTDEBUG build"
   CONFIGURE_ARGS+=(
     --with-debug-level=fastdebug
+    --with-native-debug-symbols=internal
+  )
+elif [ "${BUILD_TYPE}" = "slowdebug" ]; then
+  log "Configuring SLOWDEBUG build"
+  CONFIGURE_ARGS+=(
+    --with-debug-level=slowdebug
     --with-native-debug-symbols=internal
   )
 else
@@ -268,8 +274,10 @@ PKG_DIR="jdk-${SAFE_TAG#jdk-}"
 TAR_GZ_PREFIX="openjdk-${SAFE_TAG#jdk-}_linux-x64_bin"
 
 # Append build type suffix to distinguish debug from release artifacts
-if [ "${BUILD_TYPE}" = "debug" ]; then
-  TAR_GZ_PREFIX="${TAR_GZ_PREFIX}-debug"
+if [ "${BUILD_TYPE}" = "fastdebug" ]; then
+  TAR_GZ_PREFIX="${TAR_GZ_PREFIX}-fastdebug"
+elif [ "${BUILD_TYPE}" = "slowdebug" ]; then
+  TAR_GZ_PREFIX="${TAR_GZ_PREFIX}-slowdebug"
 fi
 
 pushd "$(dirname "${IMAGE_DIR}")" >/dev/null
